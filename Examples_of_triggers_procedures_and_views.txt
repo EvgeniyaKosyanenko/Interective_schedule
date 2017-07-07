@@ -1,0 +1,110 @@
+#trigger for table subject
+
+CREATE OR ALTER TRIGGER SUBJECTS_BI0_ORIGINAL FOR SUBJECTS
+ACTIVE BEFORE INSERT POSITION 0
+AS
+begin
+	if (new.subject in 
+		(select s.subject from subjects s)) 
+	then
+	exception error_subject;
+end
+
+#procedure for selecting subject
+create or alter procedure SELECT_SUBJECT (NAME_SUBJECT varchar(100))
+returns (ID integer)
+as
+declare variable NAME varchar(100);
+begin
+  select a.id
+  from subjects a
+  where a.subject = :name_subject
+  into :id;
+  suspend;
+end^
+
+#view for checking lessons
+CREATE OR ALTER VIEW CHECK_LES(
+    ID,
+    FULL_NAME,
+    COURSE_NUM,
+    GROUP_NUM,
+    LESS_NUM,
+    DAYS,
+    WEEK_SPLIT,
+    SUBGROUP_COUNT,
+    SUBGROUP_NUM,
+    ID_CLASS)
+AS
+select l.id, t.full_name, st.course_num,  
+	  st.group_num,les.less_num, l.days, l.week_split,
+       l.subgroup_count,l.subgroup_num, l.classroom_set_id
+from lessons l join curriculum c 
+on (l.curriculumid = c.id)
+join teachers t on (c.teacher_id = t.id)
+join study_groops st on (st.id = c.study_group_id)
+join lesson_time les on (les.id = l.lesson_time_id)
+
+#view for checking classrooms
+CREATE OR ALTER VIEW CHECK_CLASSROOMS(
+    ID,
+    NUM_CLASSROOM,
+    COURSE,
+    GROUPE,
+    LESS_NUM,
+    DAYS,
+    WEEK_SPLIT,
+    SUBGROUP_COUNT,
+    SUBGROUP_NAME)
+AS
+select l.id, cs.rooms, st.course_num, st.group_num, 
+les.less_num, l.days, l.week_split, l.subgroup_count, l.subgroup_num
+from lessons l join curriculum c on (l.curriculumid = c.id)
+	join select_class_set cs on (l.classroom_set_id = cs.id)
+join study_groops st on (st.id = c.study_group_id)
+join lesson_time les on (les.id = l.lesson_time_id)
+
+#Search for mistakes for teachers
+for select a.full_name, a.days, a.less_num, a.course_num, 
+		 a.group_num, b.full_name
+from CHECK_Les a join check_les b on (a.less_num = b.less_num)
+and (a.days = b.days)
+and ((a.week_split = b.week_split) 
+or (a.week_split = 0) or (b.week_split = 0) )
+and (((a.subgroup_count = b.subgroup_count)
+and (a.subgroup_num = b.subgroup_num)) 
+or (a.subgroup_count = 1) or (b.subgroup_count = 1))
+and (a.id < b.id)
+into :full_name, :days, :num_par, :course, :gorupe, :full_name1
+
+# checking entered data for audiences
+for select a.full_name, a.days, a.less_num, a.course_num, 
+		 a.group_num, b.full_name
+from CHECK_Les a join check_les b on(a.less_num = b.less_num)
+and (a.days = b.days)
+and ((a.week_split = b.week_split) 
+or (a.week_split = 0) or (b.week_split = 0))
+and (((a.subgroup_count = b.subgroup_count)
+and (a.subgroup_num = b.subgroup_num))
+or (a.subgroup_count = 1) or (b.subgroup_count = 1))
+and (a.id < b.id)
+into :full_name, :days, :num_par, :course, :gorupe, :full_name1
+
+# procedure OURS_FOR_TEACHERS, which gives information about amount of the lessons and detailed information about them.
+select count(l.id)
+from lessons l join lesson_time les 
+on les.id = l.lesson_time_id
+join curriculum c on l.curriculumid = c.id
+join teachers t on t.id = c.teacher_id
+where t.full_name = :full_name
+into :count_ours;       
+
+for select s.subject, st.course_num, st.group_num, l.days,
+		 les.less_num
+from lessons l join lesson_time les on les.id = l.lesson_time_id
+join curriculum c on l.curriculumid = c.id
+join teachers t on t.id = c.teacher_id
+join subjects s on   c.subject_id = s.id
+join study_groops st on c.study_group_id = st.id
+where t.full_name = :full_name
+into :sub_name, :course, :groop, :day_of_week, :number_lesson
